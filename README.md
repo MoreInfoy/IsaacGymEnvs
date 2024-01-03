@@ -171,11 +171,6 @@ Here is an example command for how to run in this way -
 
 Where the `--nproc_per_node=` flag specifies how many processes to run and note the `multi_gpu=True` flag must be set on the train script in order for multi-GPU training to run.
 
-## Population Based Training
-
-You can run population based training to help find good hyperparameters or to train on very difficult environments which would otherwise
-be hard to learn anything on without it. See [the readme](docs/pbt.md) for details.
-
 ## WandB support
 
 You can run [WandB](https://wandb.ai/) with Isaac Gym Envs by setting `wandb_activate=True` flag from the command line. You can set the group, name, entity, and project for the run by setting the `wandb_group`, `wandb_name`, `wandb_entity` and `wandb_project` set. Make sure you have WandB installed with `pip install wandb` before activating.
@@ -254,18 +249,6 @@ Please cite this work as:
       author={Viktor Makoviychuk and Lukasz Wawrzyniak and Yunrong Guo and Michelle Lu and Kier Storey and Miles Macklin and David Hoeller and Nikita Rudin and Arthur Allshire and Ankur Handa and Gavriel State},
       year={2021},
       journal={arXiv preprint arXiv:2108.10470}
-}
-```
-
-**Note** if you use the DexPBT: Scaling up Dexterous Manipulation for Hand-Arm Systems with Population Based Training work or the code related to Population Based Training, please cite the following paper:
-
-```
-@inproceedings{
-	petrenko2023dexpbt,
-	author = {Aleksei Petrenko, Arthur Allshire, Gavriel State, Ankur Handa, Viktor Makoviychuk},
-	title = {DexPBT: Scaling up Dexterous Manipulation for Hand-Arm Systems with Population Based Training},
-	booktitle = {RSS},
-	year = {2023}
 }
 ```
 

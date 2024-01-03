@@ -241,14 +241,6 @@ class Ant(VecTask):
             self.vec_sensor_tensor, self.actions, self.dt, self.contact_force_scale,
             self.basis_vec0, self.basis_vec1, self.up_axis_idx)
 
-    # Required for PBT training
-    def compute_true_objective(self):
-
-        velocity = self.root_states[:, 7:10]
-
-        # We optimize for the maximum velocity along the x-axis (forward)
-        self.extras['true_objective'] = velocity[:, 0].squeeze()
-
     def reset_idx(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
@@ -294,7 +286,6 @@ class Ant(VecTask):
 
         self.compute_observations()
         self.compute_reward(self.actions)
-        self.compute_true_objective()
 
         # debug viz
         if self.viewer and self.debug_viz:

@@ -46,9 +46,6 @@ def preprocess_train_config(cfg, config_dict):
 
     train_cfg['device'] = cfg.rl_device
 
-    train_cfg['population_based_training'] = cfg.pbt.enabled
-    train_cfg['pbt_idx'] = cfg.pbt.policy_idx if cfg.pbt.enabled else None
-
     train_cfg['full_experiment_name'] = cfg.get('full_experiment_name')
 
     print(f'Using rl_device: {cfg.rl_device}')
@@ -77,16 +74,12 @@ def launch_rlg_hydra(cfg: DictConfig):
 
     # noinspection PyUnresolvedReferences
     import isaacgym
-    from isaacgymenvs.pbt.pbt import PbtAlgoObserver, initial_pbt_check
     from isaacgymenvs.utils.rlgames_utils import multi_gpu_get_rank
     from hydra.utils import to_absolute_path
     from isaacgymenvs.tasks import isaacgym_task_map
     import gym
     from isaacgymenvs.utils.reformat import omegaconf_to_dict, print_dict
     from isaacgymenvs.utils.utils import set_np_formatting, set_seed
-
-    if cfg.pbt.enabled:
-        initial_pbt_check(cfg)
 
     from isaacgymenvs.utils.rlgames_utils import RLGPUEnv, RLGPUAlgoObserver, MultiObserver, ComplexObsRLGPUEnv
     from isaacgymenvs.utils.wandb_utils import WandbAlgoObserver
@@ -170,10 +163,6 @@ def launch_rlg_hydra(cfg: DictConfig):
     rlg_config_dict = preprocess_train_config(cfg, rlg_config_dict)
 
     observers = [RLGPUAlgoObserver()]
-
-    if cfg.pbt.enabled:
-        pbt_observer = PbtAlgoObserver(cfg)
-        observers.append(pbt_observer)
 
     if cfg.wandb_activate:
         cfg.seed += global_rank

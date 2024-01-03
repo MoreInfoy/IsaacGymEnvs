@@ -28,7 +28,6 @@ List of Examples
 * [Adversarial Motion Priors](#amp-adversarial-motion-priors-humanoidamppy)
 * [Factory](#factory-fast-contact-for-robotic-assembly)
 * [DeXtreme](#dextreme-transfer-of-agile-in-hand-manipulation-from-simulation-to-reality)
-* [DexPBT](#dexpbt-scaling-up-dexterous-manipulation-for-hand-arm-systems-with-population-based-training)
 * [IndustReal](#industreal-transferring-contact-rich-assembly-tasks-from-simulation-to-reality)
 
 ### Ant [ant.py](../isaacgymenvs/tasks/ant.py)
@@ -490,26 +489,6 @@ More videos are available at [dextreme.org](https://dextreme.org)
 	author = {Ankur Handa, Arthur Allshire, Viktor Makoviychuk, Aleksei Petrenko, Ritvik Singh, Jingzhou Liu, Denys Makoviichuk, Karl Van Wyk, Alexander Zhurkevich, Balakumar Sundaralingam, Yashraj Narang, Jean-Francois Lafleche, Dieter Fox, Gavriel State},
 	title = {DeXtreme: Transfer of Agile In-hand Manipulation from Simulation to Reality},
 	booktitle = {ICRA},
-	year = {2023}
-}
-```
-
-### DexPBT: Scaling up Dexterous Manipulation for Hand-Arm Systems with Population Based Training
-
-DexPBT provides an example of solving challenging hand+arm dextrous manipulation tasks using Population Based Training (PBT). You can read further details of the tasks in the [extended documentation](pbd.md).
-
-There are two [DexPBT](https://sites.google.com/view/dexpbt) base environments, single- and dual-arms: **AllegroKukaLSTM** and **AllegroKukaTwoArmsLSTM** and a few different taks: reorientation, regrasping and grasp-and-throw for **AllegroKukaLSTM** and reorientation and regrasping for **AllegroKukaTwoArmsLSTM**. They are both compatible with the standard way of training in Isaac Gym via `python train.py task=AllegroKukaLSTM task/env=<reorientation or regrasping or throw>` `python train.py task=AllegroKukaTwoArmsLSTM task/env=<reorientation or regrasping>`. For reproducibility, we provide the exact settings with which we trained for those environments.
-
-![Training results](https://github.com/Denys88/rl_games/assets/463063/3c073a0a-69e7-4696-b86f-64c4c1a7e288)
-
-More videos are available at [https://sites.google.com/view/dexpbt](https://sites.google.com/view/dexpbt)
-
-```
-@inproceedings{
-	petrenko2023dexpbt,
-	author = {Aleksei Petrenko, Arthur Allshire, Gavriel State, Ankur Handa, Viktor Makoviychuk},
-	title = {DexPBT: Scaling up Dexterous Manipulation for Hand-Arm Systems with Population Based Training},
-	booktitle = {RSS},
 	year = {2023}
 }
 ```

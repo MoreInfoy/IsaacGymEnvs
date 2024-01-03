@@ -11,16 +11,6 @@ Release Notes
 * Added [IndustReal](https://sites.google.com/nvidia.com/industreal) environments: IndustRealTaskPegsInsert and IndustRealTaskGearsInsert.
 * Updated hydra version to 1.2.
 
-1.4.0
------
-
-* Added [DexPBT](https://sites.google.com/view/dexpbt) (population based training) code and new AllegroKuka and AllegroKukaTwoArms environments.
-* Added multi-node training support.
-* Updated Allegro Hand assets.
-* Fixed AMP save/load weights issue.
-* Migrated Isaac Gym isaacgym.torch_utils to isaacgymenvs.utils.torch_jit_utils.
-* Added record frames feature.
-
 1.3.4
 -----
 
