@@ -25,16 +25,16 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
+from .a1 import UnitreeA1
 from .ant import Ant
 from .anymal import Anymal
 from .anymal_terrain import AnymalTerrain
 from .humanoid import Humanoid
 from .humanoid_amp import HumanoidAMP
 
-
 # Mappings from strings to environments
 isaacgym_task_map = {
+    "A1": UnitreeA1,
     "Ant": Ant,
     "Anymal": Anymal,
     "AnymalTerrain": AnymalTerrain,
