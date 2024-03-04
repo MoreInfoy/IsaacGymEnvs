@@ -32,6 +32,7 @@ from .anymal_terrain import AnymalTerrain
 from .humanoid import Humanoid
 from .humanoid_amp import HumanoidAMP
 from .atlas import Atlas
+from .p1 import BipedP1
 
 # Mappings from strings to environments
 isaacgym_task_map = {
@@ -42,4 +43,5 @@ isaacgym_task_map = {
     "Humanoid": Humanoid,
     "HumanoidAMP": HumanoidAMP,
     "Atlas": Atlas,
+    "P1": BipedP1,
 }
