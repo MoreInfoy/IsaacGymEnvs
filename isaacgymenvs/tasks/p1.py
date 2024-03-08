@@ -60,6 +60,7 @@ class BipedP1(VecTask):
         self.rew_scales["torque"] = self.cfg["env"]["learn"]["torqueRewardScale"]
         self.rew_scales["height"] = self.cfg["env"]["learn"]["heightRewardScale"]
         self.rew_scales["nominal_dof"] = self.cfg["env"]["learn"]["nominalDofRewardScale"]
+        self.rew_scales["dof_acc"] = self.cfg["env"]["learn"]["dofAccRewardScale"]
 
         # randomization
         self.randomization_params = self.cfg["task"]["randomization_params"]
@@ -116,6 +117,7 @@ class BipedP1(VecTask):
         dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
         net_contact_forces = self.gym.acquire_net_contact_force_tensor(self.sim)
         torques = self.gym.acquire_dof_force_tensor(self.sim)
+        rigid_body_state = self.gym.acquire_rigid_body_state_tensor(self.sim)
 
         self.gym.refresh_dof_state_tensor(self.sim)
         self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -130,6 +132,9 @@ class BipedP1(VecTask):
         self.contact_forces = gymtorch.wrap_tensor(net_contact_forces).view(self.num_envs, -1,
                                                                             3)  # shape: num_envs, num_bodies, xyz axis
         self.torques = gymtorch.wrap_tensor(torques).view(self.num_envs, self.num_dof)
+        self.rigid_state = gymtorch.wrap_tensor(rigid_body_state).view(self.num_envs, self.num_bodies, 13)
+
+        self.dof_vel_last = torch.zeros_like(self.dof_vel)
 
         self.commands = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
         self.commands_y = self.commands.view(self.num_envs, 3)[..., 1]
@@ -177,7 +182,7 @@ class BipedP1(VecTask):
 
         asset_options = gymapi.AssetOptions()
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
-        asset_options.collapse_fixed_joints = True
+        asset_options.collapse_fixed_joints = False
         asset_options.replace_cylinder_with_capsule = False
         asset_options.flip_visual_attachments = False
         asset_options.fix_base_link = self.cfg["env"]["urdfAsset"]["fixBaseLink"]
@@ -238,6 +243,11 @@ class BipedP1(VecTask):
         targets = self.action_scale * self.actions + self.default_dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(targets))
 
+        self.update_his_buf()
+
+    def update_his_buf(self):
+        self.dof_vel_last[:] = self.dof_vel[:]
+
     def post_physics_step(self):
         self.progress_buf += 1
 
@@ -248,46 +258,46 @@ class BipedP1(VecTask):
         self.compute_observations()
         self.compute_reward(self.actions)
 
+        self.update_reset_buf()
+
+
+
     def reward_nominal_dof(self):
         return self.rew_scales["nominal_dof"] * torch.sum(torch.square(self.default_dof_pos - self.dof_pos), dim=1)
 
     def compute_reward(self, actions):
-        self.rew_buf[:], self.reset_buf[:] = compute_p1_reward(
-            # tensors
-            self.root_states,
-            self.commands,
-            self.torques,
-            self.contact_forces,
-            self.knee_indices,
-            self.progress_buf,
-            # Dict
-            self.rew_scales,
-            # other
-            self.base_index,
-            self.max_episode_length,
-        )
-        self.rew_buf[:] += self.reward_nominal_dof()
+        total_reward = (self.reward_torque()
+                        + self.reward_vel_xy()
+                        + self.reward_omega_z()
+                        + self.reward_base_height()
+                        + self.reward_base_height()
+                        + self.reward_dof_acc())
+        total_reward = torch.clip(total_reward, 0., None)
+        self.rew_buf[:] = total_reward.detach()
 
     def compute_observations(self):
         self.gym.refresh_dof_state_tensor(self.sim)  # done in step
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
         self.gym.refresh_dof_force_tensor(self.sim)
+        print(f'foot_force: {self.contact_forces[:, self.feet_indices, :]}')
 
-        self.obs_buf[:] = compute_p1_observations(  # tensors
-            self.root_states,
-            self.commands,
-            self.dof_pos,
-            self.default_dof_pos,
-            self.dof_vel,
-            self.gravity_vec,
-            self.actions,
-            # scales
-            self.lin_vel_scale,
-            self.ang_vel_scale,
-            self.dof_pos_scale,
-            self.dof_vel_scale
-        )
+        base_lin_vel = quat_rotate_inverse(self.root_states[:, 3:7], self.root_states[:, 7:10]) * self.lin_vel_scale
+        base_ang_vel = quat_rotate_inverse(self.root_states[:, 3:7], self.root_states[:, 10:13]) * self.ang_vel_scale
+        projected_gravity = quat_rotate(self.root_states[:, 3:7], self.gravity_vec)
+
+        commands_scaled = self.commands * torch.tensor([self.lin_vel_scale, self.lin_vel_scale, self.ang_vel_scale],
+                                                       requires_grad=False,
+                                                       device=self.commands.device)
+
+        self.obs_buf[:] = torch.cat((base_lin_vel,
+                                     base_ang_vel,
+                                     projected_gravity,
+                                     commands_scaled,
+                                     (self.dof_pos - self.default_dof_pos) * self.dof_pos_scale,
+                                     self.dof_vel * self.dof_vel_scale,
+                                     self.actions
+                                     ), dim=-1)
 
     def reset_idx(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
@@ -320,87 +330,34 @@ class BipedP1(VecTask):
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
 
+    def reward_vel_xy(self):
+        base_quat = self.root_states[:, 3:7]
+        base_lin_vel = quat_rotate_inverse(base_quat, self.root_states[:, 7:10])
+        lin_vel_error = torch.sum(torch.square(self.commands[:, :2] - base_lin_vel[:, :2]), dim=1)
+        return torch.exp(-lin_vel_error / 0.25) * self.rew_scales["lin_vel_xy"]
 
-#####################################################################
-###=========================jit functions=========================###
-#####################################################################
+    def reward_omega_z(self):
+        base_quat = self.root_states[:, 3:7]
+        base_ang_vel = quat_rotate_inverse(base_quat, self.root_states[:, 10:13])
+        ang_vel_error = torch.square(self.commands[:, 2] - base_ang_vel[:, 2])
+        return torch.exp(-ang_vel_error / 0.25) * self.rew_scales["ang_vel_z"]
 
+    def reward_torque(self):
+        return torch.sum(torch.square(self.torques), dim=1) * self.rew_scales["torque"]
 
-@torch.jit.script
-def compute_p1_reward(
-        # tensors
-        root_states,
-        commands,
-        torques,
-        contact_forces,
-        knee_indices,
-        episode_lengths,
-        # Dict
-        rew_scales,
-        # other
-        base_index,
-        max_episode_length
-):
-    # (reward, reset, feet_in air, feet_air_time, episode sums)
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Dict[str, float], int, int) -> Tuple[Tensor, Tensor]
+    def reward_base_height(self):
+        return torch.square(self.root_states[:, 2] - 0.7) * self.rew_scales["height"]
 
-    # prepare quantities (TODO: return from obs ?)
-    base_quat = root_states[:, 3:7]
-    base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10])
-    base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13])
+    def reward_dof_acc(self):
+        return torch.sum(torch.square((self.dof_vel_last - self.dof_vel) / self.dt), dim=1) * self.rew_scales["dof_acc"]
 
-    # velocity tracking reward
-    lin_vel_error = torch.sum(torch.square(commands[:, :2] - base_lin_vel[:, :2]), dim=1)
-    ang_vel_error = torch.square(commands[:, 2] - base_ang_vel[:, 2])
-    rew_lin_vel_xy = torch.exp(-lin_vel_error / 0.25) * rew_scales["lin_vel_xy"]
-    rew_ang_vel_z = torch.exp(-ang_vel_error / 0.25) * rew_scales["ang_vel_z"]
+    def reward_base_acc(self):
+        return torch.sum(torch.square((self.dof_vel_last - self.dof_vel) / self.dt), dim=1) * self.rew_scales["dof_acc"]
+        print(f'feet pos: {self.rigid_state[0, self.feet_indices, :3]}')
+        print(f'base pos: {self.rigid_state[0, self.base_index, :3]}')
 
-    # torque penalty
-    rew_torque = torch.sum(torch.square(torques), dim=1) * rew_scales["torque"]
-
-    # height penalty
-    rew_height = torch.square(root_states[:, 2] - 0.7) * rew_scales["height"]
-
-    total_reward = rew_lin_vel_xy + rew_ang_vel_z + rew_torque + rew_height
-    total_reward = torch.clip(total_reward, 0., None)
-    # reset agents
-    reset = torch.norm(contact_forces[:, base_index, :], dim=1) > 1.
-    # reset = reset | torch.any(torch.norm(contact_forces[:, knee_indices, :], dim=2) > 1., dim=1)
-    time_out = episode_lengths >= max_episode_length - 1  # no terminal reward for time-outs
-    reset = reset | time_out
-    return total_reward.detach(), reset
-
-
-@torch.jit.script
-def compute_p1_observations(root_states,
-                            commands,
-                            dof_pos,
-                            default_dof_pos,
-                            dof_vel,
-                            gravity_vec,
-                            actions,
-                            lin_vel_scale,
-                            ang_vel_scale,
-                            dof_pos_scale,
-                            dof_vel_scale
-                            ):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float) -> Tensor
-    base_quat = root_states[:, 3:7]
-    base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10]) * lin_vel_scale
-    base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13]) * ang_vel_scale
-    projected_gravity = quat_rotate(base_quat, gravity_vec)
-    dof_pos_scaled = (dof_pos - default_dof_pos) * dof_pos_scale
-
-    commands_scaled = commands * torch.tensor([lin_vel_scale, lin_vel_scale, ang_vel_scale], requires_grad=False,
-                                              device=commands.device)
-
-    obs = torch.cat((base_lin_vel,
-                     base_ang_vel,
-                     projected_gravity,
-                     commands_scaled,
-                     dof_pos_scaled,
-                     dof_vel * dof_vel_scale,
-                     actions
-                     ), dim=-1)
-
-    return obs
+    def update_reset_buf(self):
+        reset = torch.norm(self.contact_forces[:, self.base_index, :], dim=1) > 1.
+        # reset = reset | torch.any(torch.norm(contact_forces[:, knee_indices, :], dim=2) > 1., dim=1)
+        time_out = self.progress_buf >= self.max_episode_length - 1  # no terminal reward for time-outs
+        self.reset_buf[:] = reset | time_out

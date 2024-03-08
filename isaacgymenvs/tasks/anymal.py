@@ -169,7 +169,7 @@ class Anymal(VecTask):
 
         asset_options = gymapi.AssetOptions()
         asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
-        asset_options.collapse_fixed_joints = True
+        asset_options.collapse_fixed_joints = False
         asset_options.replace_cylinder_with_capsule = True
         asset_options.flip_visual_attachments = True
         asset_options.fix_base_link = self.cfg["env"]["urdfAsset"]["fixBaseLink"]
@@ -216,6 +216,16 @@ class Anymal(VecTask):
             self.envs.append(env_ptr)
             self.anymal_handles.append(anymal_handle)
 
+            sensor_props = gymapi.ForceSensorProperties()
+            sensor_props.enable_forward_dynamics_forces = True
+            sensor_props.enable_constraint_solver_forces = True
+            sensor_props.use_world_frame = True
+            sensor_pose = gymapi.Transform(gymapi.Vec3(0.0, 0.0, 0.0))
+            self.sensor_idx1 = self.gym.create_asset_force_sensor(anymal_asset, self.feet_indices[0], sensor_pose, sensor_props)
+
+        _fsdata = self.gym.acquire_force_sensor_tensor(self.sim)
+        self.fsdata = gymtorch.wrap_tensor(_fsdata)
+
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.anymal_handles[0], feet_names[i])
         for i in range(len(knee_names)):
@@ -259,6 +269,8 @@ class Anymal(VecTask):
         self.gym.refresh_actor_root_state_tensor(self.sim)
         self.gym.refresh_net_contact_force_tensor(self.sim)
         self.gym.refresh_dof_force_tensor(self.sim)
+        self.gym.refresh_force_sensor_tensor(self.sim)
+        print(f'force data: {self.fsdata}')
 
         self.obs_buf[:] = compute_anymal_observations(  # tensors
                                                         self.root_states,
